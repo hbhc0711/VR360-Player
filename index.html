@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>VR 360 Dropbox Player</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --panel: rgba(16, 24, 40, 0.88);
+        --panel-2: rgba(30, 41, 59, 0.9);
+        --line: rgba(148, 163, 184, 0.22);
+        --text: #e5edf7;
+        --muted: #94a3b8;
+        --accent: #7c3aed;
+        --accent-2: #3b82f6;
+        --danger: #ef4444;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: radial-gradient(circle at top, #1d2948 0%, var(--bg) 50%, #050814 100%); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+      body { overflow: hidden; }
+
+      .app {
+        display: grid;
+        grid-template-columns: 380px 1fr;
+        height: 100dvh;
+      }
+
+      .sidebar {
+        padding: 18px;
+        border-right: 1px solid var(--line);
+        background: linear-gradient(180deg, rgba(8, 15, 32, 0.95), rgba(8, 15, 32, 0.82));
+        backdrop-filter: blur(16px);
+        overflow: auto;
+      }
+
+      .viewer-wrap {
+        position: relative;
+        min-width: 0;
+        min-height: 0;
+      }
+
+      #viewer {
+        position: absolute;
+        inset: 0;
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 16px;
+        box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+      }
+
+      .card + .card { margin-top: 14px; }
+
+      h1 {
+        font-size: 24px;
+        line-height: 1.2;
+        margin: 0 0 8px;
+      }
+
+      .lead {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      label {
+        display: block;
+        font-size: 13px;
+        color: #cbd5e1;
+        margin-bottom: 8px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .stack {
+        display: grid;
+        gap: 10px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      input[type="url"], input[type="text"], select {
+        width: 100%;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(15, 23, 42, 0.88);
+        color: var(--text);
+        padding: 13px 14px;
+        font-size: 14px;
+        outline: none;
+      }
+
+      input[type="range"] {
+        width: 100%;
+      }
+
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        padding: 12px 14px;
+        font-size: 14px;
+        font-weight: 700;
+        color: white;
+        background: linear-gradient(135deg, var(--accent), var(--accent-2));
+        cursor: pointer;
+        transition: transform 0.15s ease, opacity 0.15s ease;
+      }
+
+      button.secondary {
+        background: rgba(30, 41, 59, 0.95);
+        border: 1px solid var(--line);
+      }
+
+      button.danger {
+        background: linear-gradient(135deg, #dc2626, #ef4444);
+      }
+
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      button:not(:disabled):active {
+        transform: translateY(1px) scale(0.99);
+      }
+
+      .meta {
+        display: grid;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .meta strong { color: var(--text); }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 7px 10px;
+        font-size: 12px;
+        background: rgba(30, 41, 59, 0.95);
+        border: 1px solid var(--line);
+      }
+
+      .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .warning {
+        color: #fecaca;
+        background: rgba(127, 29, 29, 0.35);
+        border: 1px solid rgba(248, 113, 113, 0.25);
+        border-radius: 14px;
+        padding: 12px;
+        font-size: 13px;
+        line-height: 1.6;
+      }
+
+      .status-overlay {
+        position: absolute;
+        left: 18px;
+        bottom: 18px;
+        right: 18px;
+        display: grid;
+        gap: 8px;
+        pointer-events: none;
+      }
+
+      .status-box {
+        width: max-content;
+        max-width: min(100%, 720px);
+        padding: 10px 12px;
+        background: rgba(2, 8, 23, 0.78);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        backdrop-filter: blur(12px);
+        color: #dbeafe;
+        font-size: 13px;
+      }
+
+      .hint {
+        position: absolute;
+        top: 18px;
+        right: 18px;
+        padding: 10px 12px;
+        background: rgba(2, 8, 23, 0.78);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        color: #dbeafe;
+        font-size: 13px;
+        backdrop-filter: blur(12px);
+      }
+
+      .small {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.6;
+      }
+
+      .footer-note {
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.7;
+      }
+
+      #video {
+        position: fixed;
+        left: -99999px;
+        top: -99999px;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      @media (max-width: 980px) {
+        .app {
+          grid-template-columns: 1fr;
+          grid-template-rows: auto 1fr;
+        }
+        .sidebar {
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+          max-height: 48dvh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="card">
+          <h1>VR 360 Dropbox Player</h1>
+          <p class="lead">Dropbox共有リンクか、直接アクセスできるMP4 / MOV URLを貼り付けて、iPhoneで360度動画をストリーミング再生し、Cardboard表示へ切り替えるためのプレイヤーです。</p>
+        </div>
+
+        <div class="card stack">
+          <div>
+            <label for="videoUrl">動画URL</label>
+            <input id="videoUrl" type="url" placeholder="https://www.dropbox.com/scl/fi/.../video.mp4?rlkey=...&dl=0" />
+          </div>
+          <div class="row">
+            <button id="loadBtn">読み込む</button>
+            <button id="playBtn" class="secondary" disabled>再生</button>
+          </div>
+          <div class="row">
+            <button id="pauseBtn" class="secondary" disabled>一時停止</button>
+            <button id="resetBtn" class="secondary">視点リセット</button>
+          </div>
+          <div class="row">
+            <button id="cardboardBtn" class="secondary">Cardboard: OFF</button>
+            <button id="fullscreenBtn" class="secondary">全画面</button>
+          </div>
+          <button id="motionBtn" class="secondary">ヘッドトラッキングを有効化</button>
+          <div class="small">Dropbox共有リンクは自動で <strong>raw=1</strong> に変換します。公開共有リンクを使ってください。</div>
+        </div>
+
+        <div class="card stack">
+          <div>
+            <label for="hfovRange">視野角（FOV）</label>
+            <input id="hfovRange" type="range" min="45" max="100" step="1" value="75" />
+            <div class="small"><span id="hfovValue">75</span>°</div>
+          </div>
+          <div>
+            <label for="lookSpeedRange">ドラッグ感度</label>
+            <input id="lookSpeedRange" type="range" min="0.1" max="1.5" step="0.05" value="0.55" />
+            <div class="small"><span id="lookSpeedValue">0.55</span></div>
+          </div>
+          <div>
+            <label for="eyeGapRange">Cardboard左右余白</label>
+            <input id="eyeGapRange" type="range" min="0" max="80" step="1" value="0" />
+            <div class="small"><span id="eyeGapValue">0</span> px</div>
+          </div>
+        </div>
+
+        <div class="card meta">
+          <div><strong>正規化後URL</strong><br><span id="normalizedUrl">未設定</span></div>
+          <div><strong>動画状態</strong><br><span id="videoState">未読み込み</span></div>
+          <div><strong>バッファ</strong><br><span id="bufferedState">0 / 0 秒</span></div>
+          <div><strong>再生位置</strong><br><span id="timeState">0 / 0 秒</span></div>
+        </div>
+
+        <div class="card">
+          <div class="badge-row">
+            <span class="pill">360 equirectangular</span>
+            <span class="pill">Dropbox raw=1</span>
+            <span class="pill">iPhone motion permission</span>
+            <span class="pill">Cardboard split view</span>
+          </div>
+        </div>
+
+        <div class="card warning">
+          このアプリはブラウザの通常ストリーミングを使います。完全ゼロ保存は保証できません。ブラウザは再生のために一部データをバッファ・キャッシュする場合があります。
+        </div>
+
+        <div class="card footer-note">
+          使い方: 1) URLを貼る → 2) 読み込む → 3) 再生 → 4) iPhoneなら「ヘッドトラッキングを有効化」 → 5) Cardboard ON → 6) VR SHINECONへ装着。<br /><br />
+          失敗しやすい点: 非公開リンク、DropboxのプレビューURLのまま、360ではない通常動画、Safariのモーション権限未許可、回転ロックON。
+        </div>
+      </aside>
+
+      <main class="viewer-wrap">
+        <div id="viewer"></div>
+        <div class="hint">1本指ドラッグで視点移動 / ピンチでズーム不可</div>
+        <div class="status-overlay">
+          <div class="status-box" id="statusBox">待機中</div>
+          <div class="status-box" id="errorBox" style="display:none; border-color: rgba(248,113,113,.35); color:#fecaca;">エラーなし</div>
+        </div>
+      </main>
+    </div>
+
+    <video id="video" crossorigin="anonymous" playsinline webkit-playsinline preload="metadata"></video>
+
+    <script type="module">
+      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.166.1/build/three.module.js';
+      import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/controls/OrbitControls.js';
+      import { DeviceOrientationControls } from 'https://cdn.jsdelivr.net/npm/three@0.166.1/examples/jsm/controls/DeviceOrientationControls.js';
+
+      const els = {
+        viewer: document.getElementById('viewer'),
+        video: document.getElementById('video'),
+        videoUrl: document.getElementById('videoUrl'),
+        loadBtn: document.getElementById('loadBtn'),
+        playBtn: document.getElementById('playBtn'),
+        pauseBtn: document.getElementById('pauseBtn'),
+        resetBtn: document.getElementById('resetBtn'),
+        cardboardBtn: document.getElementById('cardboardBtn'),
+        fullscreenBtn: document.getElementById('fullscreenBtn'),
+        motionBtn: document.getElementById('motionBtn'),
+        hfovRange: document.getElementById('hfovRange'),
+        hfovValue: document.getElementById('hfovValue'),
+        lookSpeedRange: document.getElementById('lookSpeedRange'),
+        lookSpeedValue: document.getElementById('lookSpeedValue'),
+        eyeGapRange: document.getElementById('eyeGapRange'),
+        eyeGapValue: document.getElementById('eyeGapValue'),
+        normalizedUrl: document.getElementById('normalizedUrl'),
+        videoState: document.getElementById('videoState'),
+        bufferedState: document.getElementById('bufferedState'),
+        timeState: document.getElementById('timeState'),
+        statusBox: document.getElementById('statusBox'),
+        errorBox: document.getElementById('errorBox'),
+      };
+
+      const state = {
+        cardboard: false,
+        motionEnabled: false,
+        motionGranted: false,
+        normalizedUrl: '',
+        dragSensitivity: Number(els.lookSpeedRange.value),
+        eyeGap: Number(els.eyeGapRange.value),
+      };
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(els.viewer.clientWidth, els.viewer.clientHeight);
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.setScissorTest(false);
+      els.viewer.appendChild(renderer.domElement);
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x050814);
+
+      const camera = new THREE.PerspectiveCamera(Number(els.hfovRange.value), els.viewer.clientWidth / Math.max(1, els.viewer.clientHeight), 0.1, 1100);
+      camera.position.set(0, 0, 0.1);
+
+      const sphere = new THREE.Mesh(
+        new THREE.SphereGeometry(500, 80, 60).scale(-1, 1, 1),
+        new THREE.MeshBasicMaterial({ color: 0x111827, wireframe: false })
+      );
+      scene.add(sphere);
+
+      const orbit = new OrbitControls(camera, renderer.domElement);
+      orbit.enablePan = false;
+      orbit.enableZoom = false;
+      orbit.rotateSpeed = -state.dragSensitivity;
+      orbit.target.set(0, 0, 0);
+      orbit.update();
+
+      let deviceControls = null;
+      let videoTexture = null;
+      let renderRequested = false;
+
+      function setStatus(text) {
+        els.statusBox.textContent = text;
+      }
+
+      function setError(text = '') {
+        if (!text) {
+          els.errorBox.style.display = 'none';
+          els.errorBox.textContent = 'エラーなし';
+          return;
+        }
+        els.errorBox.style.display = 'block';
+        els.errorBox.textContent = text;
+      }
+
+      function normalizeDropboxUrl(input) {
+        const raw = input.trim();
+        if (!raw) return '';
+        let parsed;
+        try {
+          parsed = new URL(raw);
+        } catch {
+          return raw;
+        }
+
+        const host = parsed.hostname.replace(/^www\./, '');
+        if (host === 'dropbox.com' || host.endsWith('.dropbox.com')) {
+          parsed.searchParams.delete('dl');
+          parsed.searchParams.set('raw', '1');
+          return parsed.toString();
+        }
+
+        return raw;
+      }
+
+      function updateUiMeta() {
+        els.normalizedUrl.textContent = state.normalizedUrl || '未設定';
+        const duration = Number.isFinite(els.video.duration) ? els.video.duration : 0;
+        const current = Number.isFinite(els.video.currentTime) ? els.video.currentTime : 0;
+        let buffered = 0;
+        if (els.video.buffered && els.video.buffered.length > 0) {
+          buffered = els.video.buffered.end(els.video.buffered.length - 1);
+        }
+        els.videoState.textContent = [
+          els.video.readyState >= 1 ? 'メタデータ取得済み' : '待機',
+          els.video.paused ? '停止中' : '再生中',
+          state.motionEnabled ? 'ヘッドトラッキングON' : '手動視点',
+          state.cardboard ? 'Cardboard ON' : 'Cardboard OFF',
+        ].join(' / ');
+        els.bufferedState.textContent = `${buffered.toFixed(1)} / ${duration.toFixed(1)} 秒`;
+        els.timeState.textContent = `${current.toFixed(1)} / ${duration.toFixed(1)} 秒`;
+      }
+
+      function ensureVideoTexture() {
+        if (videoTexture) return;
+        videoTexture = new THREE.VideoTexture(els.video);
+        videoTexture.colorSpace = THREE.SRGBColorSpace;
+        videoTexture.minFilter = THREE.LinearFilter;
+        videoTexture.magFilter = THREE.LinearFilter;
+        videoTexture.generateMipmaps = false;
+        sphere.material.map = videoTexture;
+        sphere.material.needsUpdate = true;
+      }
+
+      function resize() {
+        const w = els.viewer.clientWidth || window.innerWidth;
+        const h = els.viewer.clientHeight || window.innerHeight;
+        renderer.setSize(w, h);
+        camera.aspect = w / Math.max(1, h);
+        camera.updateProjectionMatrix();
+      }
+
+      function render() {
+        renderRequested = false;
+        requestAnimationFrame(render);
+
+        if (state.motionEnabled && deviceControls) {
+          deviceControls.update();
+        } else {
+          orbit.update();
+        }
+
+        renderer.setScissorTest(false);
+        renderer.setViewport(0, 0, renderer.domElement.width, renderer.domElement.height);
+
+        if (!state.cardboard) {
+          renderer.render(scene, camera);
+          updateUiMeta();
+          return;
+        }
+
+        const width = renderer.domElement.width;
+        const height = renderer.domElement.height;
+        const half = Math.floor(width / 2);
+        const gap = Math.min(state.eyeGap, Math.max(0, half - 20));
+        const each = Math.max(1, half - gap);
+
+        renderer.setScissorTest(true);
+
+        renderer.setViewport(0, 0, each, height);
+        renderer.setScissor(0, 0, each, height);
+        renderer.render(scene, camera);
+
+        renderer.setViewport(half + gap, 0, each, height);
+        renderer.setScissor(half + gap, 0, each, height);
+        renderer.render(scene, camera);
+
+        renderer.setScissorTest(false);
+        updateUiMeta();
+      }
+
+      function startRenderLoop() {
+        if (renderRequested) return;
+        renderRequested = true;
+        render();
+      }
+
+      async function loadVideo() {
+        setError('');
+        const input = els.videoUrl.value.trim();
+        if (!input) {
+          setError('動画URLが空です。Dropbox共有リンクか直接MP4/MOV URLを貼ってください。');
+          return;
+        }
+
+        const normalized = normalizeDropboxUrl(input);
+        state.normalizedUrl = normalized;
+        updateUiMeta();
+        els.normalizedUrl.textContent = normalized;
+        setStatus('動画URLを設定しました。メタデータを読み込み中です。');
+
+        if (!els.video.paused) {
+          try { await els.video.pause(); } catch {}
+        }
+
+        els.video.src = normalized;
+        els.video.load();
+      }
+
+      async function playVideo() {
+        try {
+          await els.video.play();
+          setStatus('再生中です。必要ならCardboardをONにしてください。');
+          els.playBtn.disabled = true;
+          els.pauseBtn.disabled = false;
+        } catch (error) {
+          setError(`再生を開始できませんでした: ${error?.message || error}`);
+        }
+      }
+
+      async function pauseVideo() {
+        try {
+          els.video.pause();
+          setStatus('一時停止しました。');
+          els.playBtn.disabled = false;
+          els.pauseBtn.disabled = true;
+        } catch (error) {
+          setError(`一時停止に失敗しました: ${error?.message || error}`);
+        }
+      }
+
+      function resetView() {
+        if (deviceControls) {
+          deviceControls.disconnect();
+          deviceControls.dispose?.();
+          deviceControls = null;
+        }
+        state.motionEnabled = false;
+        orbit.enabled = true;
+        camera.rotation.set(0, 0, 0);
+        camera.position.set(0, 0, 0.1);
+        orbit.target.set(0, 0, 0);
+        orbit.update();
+        els.motionBtn.textContent = 'ヘッドトラッキングを有効化';
+        setStatus('視点をリセットしました。');
+      }
+
+      async function enableMotion() {
+        setError('');
+        try {
+          if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            const result = await DeviceOrientationEvent.requestPermission();
+            if (result !== 'granted') {
+              setError('モーション権限が拒否されました。iPhoneのSafariで許可してください。');
+              return;
+            }
+          }
+
+          if (deviceControls) {
+            deviceControls.disconnect();
+            deviceControls.dispose?.();
+          }
+
+          deviceControls = new DeviceOrientationControls(camera);
+          deviceControls.connect();
+          state.motionEnabled = true;
+          state.motionGranted = true;
+          orbit.enabled = false;
+          els.motionBtn.textContent = 'ヘッドトラッキング有効中';
+          setStatus('ヘッドトラッキングを有効化しました。iPhoneを動かして視点が変わるか確認してください。');
+        } catch (error) {
+          setError(`モーション権限の取得に失敗しました: ${error?.message || error}`);
+        }
+      }
+
+      async function toggleFullscreen() {
+        try {
+          if (!document.fullscreenElement) {
+            await document.documentElement.requestFullscreen?.();
+            setStatus('全画面表示に切り替えました。');
+          } else {
+            await document.exitFullscreen?.();
+            setStatus('全画面表示を解除しました。');
+          }
+        } catch (error) {
+          setError(`全画面表示に失敗しました: ${error?.message || error}`);
+        }
+      }
+
+      function toggleCardboard() {
+        state.cardboard = !state.cardboard;
+        els.cardboardBtn.textContent = `Cardboard: ${state.cardboard ? 'ON' : 'OFF'}`;
+        setStatus(state.cardboard ? 'Cardboard表示に切り替えました。左右2画面になります。' : '通常表示に戻しました。');
+      }
+
+      els.loadBtn.addEventListener('click', loadVideo);
+      els.playBtn.addEventListener('click', playVideo);
+      els.pauseBtn.addEventListener('click', pauseVideo);
+      els.resetBtn.addEventListener('click', resetView);
+      els.motionBtn.addEventListener('click', enableMotion);
+      els.cardboardBtn.addEventListener('click', toggleCardboard);
+      els.fullscreenBtn.addEventListener('click', toggleFullscreen);
+
+      els.hfovRange.addEventListener('input', () => {
+        camera.fov = Number(els.hfovRange.value);
+        camera.updateProjectionMatrix();
+        els.hfovValue.textContent = String(camera.fov);
+      });
+
+      els.lookSpeedRange.addEventListener('input', () => {
+        state.dragSensitivity = Number(els.lookSpeedRange.value);
+        orbit.rotateSpeed = -state.dragSensitivity;
+        els.lookSpeedValue.textContent = Number(els.lookSpeedRange.value).toFixed(2);
+      });
+
+      els.eyeGapRange.addEventListener('input', () => {
+        state.eyeGap = Number(els.eyeGapRange.value);
+        els.eyeGapValue.textContent = String(state.eyeGap);
+      });
+
+      els.video.addEventListener('loadedmetadata', () => {
+        ensureVideoTexture();
+        els.playBtn.disabled = false;
+        els.pauseBtn.disabled = true;
+        setStatus('メタデータ読み込み完了。再生を押してください。');
+        updateUiMeta();
+      });
+
+      els.video.addEventListener('loadeddata', () => {
+        ensureVideoTexture();
+        setStatus('映像フレームを受信しました。');
+        updateUiMeta();
+      });
+
+      els.video.addEventListener('progress', updateUiMeta);
+      els.video.addEventListener('timeupdate', updateUiMeta);
+      els.video.addEventListener('canplay', () => setStatus('再生可能です。'));
+      els.video.addEventListener('waiting', () => setStatus('バッファ中です。ネットワーク待ちの可能性があります。'));
+      els.video.addEventListener('playing', () => setStatus('再生中です。'));
+      els.video.addEventListener('pause', () => updateUiMeta());
+      els.video.addEventListener('ended', () => {
+        setStatus('動画の末尾まで再生しました。');
+        els.playBtn.disabled = false;
+        els.pauseBtn.disabled = true;
+      });
+      els.video.addEventListener('error', () => {
+        const mediaError = els.video.error;
+        const message = mediaError
+          ? `動画読み込みエラー code=${mediaError.code}。Dropbox共有権限、URL形式、CORS、動画形式を確認してください。`
+          : '動画読み込みエラーが発生しました。';
+        setError(message);
+      });
+
+      window.addEventListener('resize', resize);
+      window.addEventListener('orientationchange', () => setTimeout(resize, 300));
+
+      resize();
+      startRenderLoop();
+      updateUiMeta();
+      setStatus('URLを貼り付けて「読み込む」を押してください。');
+    </script>
+  </body>
+</html>
